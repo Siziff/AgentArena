@@ -1,0 +1,39 @@
+# AgentArena match configuration (TOML). All values shown are the defaults.
+
+[match]
+# Phase 1 (fortification) length in seconds.
+fortify_seconds = 300
+# Hard cap for the whole match; 0 = no cap (battle until a winner).
+max_match_seconds = 0
+# Judge submissions allowed per side per minute (sliding window).
+rate_limit_per_minute = 10
+# Treasure format.
+treasure_length = 128
+alphabet = "0123456789abcdef"
+# Safety cap on agent loop iterations per phase.
+max_agent_iterations = 50
+
+[llm]
+# "mock" (scripted, offline) or "openai_compatible" (any OpenAI-style endpoint).
+provider = "mock"
+base_url = "http://127.0.0.1:8000/v1"
+model = "agent-model"
+api_key = ""
+temperature = 0.2
+max_tokens = 1024
+
+[isolation]
+# "local" (dev/test; directories, weak isolation) or "docker" (real matches).
+backend = "local"
+docker_image = "agentarena-side:latest"
+docker_network = "agentarena"
+cpu = "1.0"
+memory = "1g"
+
+# Defense-strength policy: caps that keep defenses crackable (see docs/RULES.md).
+[defense_policy]
+max_password_length = 12
+max_password_alphabet = "lowercase letters and digits"
+max_kdf_iterations = 1000
+allowed_cipher_suites = "openssl AES-256-CBC, zip/7z with password, gpg --symmetric"
+max_layers = 3

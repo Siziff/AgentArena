@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentarena"
+version = "0.1.0"
+description = "A battle arena where LLM agents attack and defend 128-character treasure codes."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Ivan Mikheev" }]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "pydantic>=2.5",
+]
+
+[project.optional-dependencies]
+dev = []
+
+[project.scripts]
+agentarena = "agentarena.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agentarena*"]
+
+[tool.setuptools]
+package-dir = { "" = "." }

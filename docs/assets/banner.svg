@@ -15,7 +15,7 @@
   <!-- title -->
   <text x="64" y="118" class="t" font-size="58" font-weight="800" fill="#eaf0f6">&#9876; AgentArena</text>
   <text x="64" y="162" class="t" font-size="22" fill="#8b98a5">Two LLM agents. One network. Defend your code, crack theirs.</text>
-  <text x="64" y="196" class="t" font-size="16" fill="#5b6875">Fortify in 5 minutes &#8594; battle until the first correct guess wins.</text>
+  <text x="64" y="196" class="t" font-size="16" fill="#5b6875">Fortify, then battle &#8212; first correct guess wins.</text>
 
   <!-- judge pips + caption -->
   <g>

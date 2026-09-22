@@ -32,9 +32,9 @@ An agent must simultaneously **fortify its own treasure** so that no rival can r
 
 A match is divided into two phases.
 
-### Phase 1 &mdash; Fortification (5 minutes)
+### Phase 1 &mdash; Fortification (configurable window)
 
-When the match clock starts, each agent receives **5 minutes** to build its defenses. This is the **fortification window**. During this phase the agent's only job is to **harden its own treasure** against future intrusion. Allowed and expected techniques include, but are not limited to:
+When the match clock starts, each agent receives a **configurable fortification window** (set per match via `fortify_seconds`; 60s in the battle UI's quick test) to build its defenses. During this phase the agent's only job is to **harden its own treasure** against future intrusion. Allowed and expected techniques include, but are not limited to:
 
 - Encrypting the treasure (or the file system path to it) with passwords, keys, or derived secrets.
 - Layering multiple encryption passes with different algorithms and key-derivation functions.
@@ -47,7 +47,7 @@ When the match clock starts, each agent receives **5 minutes** to build its defe
 
 The treasure itself stays intact and readable to its own agent; only the *access path* to it is fortified.
 
-After 5 minutes elapse, fortification ends and the battle phase begins automatically. Defenses built during Phase 1 remain in place and may continue to be hardened during Phase 2.
+When the fortification window elapses, fortification ends and the battle phase begins automatically. Defenses built during Phase 1 remain in place and may continue to be hardened during Phase 2.
 
 ### Phase 2 &mdash; Battle (no fixed time limit)
 
@@ -94,34 +94,6 @@ Guidelines for commentary:
 - Describes **what the agent is doing right now** or **what it just accomplished**.
 - May be intentionally vague or even misleading within the rules &mdash; deception is part of the game, but commentary must not contain the agent's own secret hash code or any content that would directly leak the treasure.
 - Surfaced in real time so spectators can follow both sides' reasoning and progress.
-
----
-
-## The Arena UI
-
-Watch the fight live in two chat panes (Alpha vs Bravo) with a **Judge console**
-underneath: a match timer, per-model submission counters, and the **10-requests-
-per-minute window** shown as verdict-colored pips (red = miss, green = the
-winning hit — which ends the match).
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ ⚔ AgentArena      match m-0319   [BATTLE]             T+ 03:42   │
-├─────────────────────────────┬────────────────────────────────────┤
-│ ALPHA (defends its code)    │ BRAVO (defends its code)           │
-│ ┌────────────────────────┐  │ ┌──────────────────────────────┐   │
-│ │ Cracking Bravo's zip…  │  │ │ Probing Alpha's workspace…   │   │
-│ └────────────────────────┘  │ └──────────────────────────────┘   │
-│            VS               │             VS                     │
-├─────────────────────────────┴────────────────────────────────────┤
-│ ⚖ JUDGE   T+ 03:42      rate limit: 10 submissions / min / model │
-│ ALPHA  total 4 · this min  ●●●●○○○○○○  4/10                      │
-│ BRAVO  total 3 · this min  ●●●○○○○○○○  3/10   🏆 ALPHA WINS      │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-- **Static preview:** open [`arena_preview.html`](./arena_preview.html) in a browser — it plays a simulated match.
-- **Live during a match:** `python -m agentarena.cli demo --serve` (or `run-match ... --serve`), then open `http://localhost:8001`.
 
 ---
 

@@ -1,5 +1,6 @@
 """Tests for the Arena feed store and HTTP server."""
 
+import contextlib
 import json
 import socket
 import tempfile
@@ -13,6 +14,35 @@ import uvicorn
 
 from agentarena.arena.feed import FeedStore
 from agentarena.arena.server import create_app
+
+
+@contextlib.contextmanager
+def serve(app):
+    """Run a FastAPI app under uvicorn in a background thread; yield base URL."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(200):
+        if server.started:
+            break
+        time.sleep(0.05)
+    if not server.started:
+        raise RuntimeError("server failed to start")
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5.0)
+
+
+def _get(base, path):
+    with urllib.request.urlopen(base + path, timeout=5) as resp:
+        return resp.status, json.loads(resp.read().decode("utf-8"))
 
 
 class TestFeedStore(unittest.TestCase):
@@ -97,6 +127,32 @@ class TestFeedServer(unittest.TestCase):
         status, body = self._get("/")
         self.assertEqual(status, 200)
         self.assertIn("AgentArena", body)
+
+
+class TestFeedStatus(unittest.TestCase):
+    def test_status_with_provider(self):
+        payload = {
+            "match_status": "ongoing",
+            "winner": None,
+            "attempts": {"alpha": 1, "bravo": 2},
+            "limits": {"per_window": 10, "window_seconds": 60},
+            "window": {"alpha": {"used": 1, "limit": 10}, "bravo": {"used": 2, "limit": 10}},
+            "match": {"state": "battling", "elapsed_seconds": 12.3},
+        }
+        app = create_app(FeedStore(), status_provider=lambda: payload)
+        with serve(app) as base:
+            status, body = _get(base, "/status")
+            self.assertEqual(status, 200)
+            self.assertEqual(body["match_status"], "ongoing")
+            self.assertEqual(body["window"]["bravo"]["used"], 2)
+            self.assertEqual(body["match"]["state"], "battling")
+
+    def test_status_fallback_without_provider(self):
+        app = create_app(FeedStore())
+        with serve(app) as base:
+            status, body = _get(base, "/status")
+            self.assertEqual(status, 200)
+            self.assertEqual(body["match_status"], "unknown")
 
 
 if __name__ == "__main__":

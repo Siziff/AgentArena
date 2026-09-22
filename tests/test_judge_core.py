@@ -88,6 +88,27 @@ class TestStatus(unittest.TestCase):
         self.assertIn("alpha", status["attempts"])
         self.assertEqual(status["limits"]["per_window"], 10)
 
+    def test_status_window_usage(self):
+        core = make_core(rate=10)
+        core.submit("alpha", "c" * 128)
+        core.submit("alpha", "d" * 128)
+        status = core.status()
+        self.assertEqual(status["window"]["alpha"]["used"], 2)
+        self.assertEqual(status["window"]["alpha"]["limit"], 10)
+        self.assertEqual(status["window"]["alpha"]["verdicts"], ["incorrect", "incorrect"])
+        self.assertEqual(status["window"]["bravo"]["used"], 0)
+
+    def test_status_window_verdicts_end_at_first_correct(self):
+        core = make_core(rate=10)
+        core.submit("alpha", "c" * 128)   # incorrect
+        core.submit("alpha", BRAVO_T)      # correct -> wins, match ends
+        status = core.status()
+        self.assertEqual(
+            status["window"]["alpha"]["verdicts"], ["incorrect", "correct"]
+        )
+        self.assertEqual(status["match_status"], "finished")
+        self.assertEqual(status["winner"], "alpha")
+
 
 if __name__ == "__main__":
     unittest.main()

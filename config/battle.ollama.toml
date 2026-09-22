@@ -1,0 +1,30 @@
+# Real-model battle config backed by a single local Ollama server (no API key).
+# One Ollama instance serves both models on the free GPUs:
+#   Alpha -> qwen2.5:7b
+#   Bravo -> qwen2.5:3b
+# Start Ollama (scripts/ollama_serve.sh), pull the models, then:
+#   python -m agentarena.cli battle --config config/battle.ollama.toml
+
+[match]
+fortify_seconds = 60        # 1-minute fortification for the first test
+max_match_seconds = 1800
+rate_limit_per_minute = 10
+max_agent_iterations = 40
+
+[llm]
+# Text action protocol: robust for small models with weak native tool-calling.
+provider = "openai_text"
+api_key = "ollama"          # Ollama ignores auth; any placeholder works
+temperature = 0.3
+max_tokens = 1024
+
+[llm.alpha]
+base_url = "http://127.0.0.1:11434/v1"
+model = "qwen2.5:7b"
+
+[llm.bravo]
+base_url = "http://127.0.0.1:11435/v1"
+model = "qwen2.5:3b"
+
+[isolation]
+backend = "local"

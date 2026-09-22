@@ -37,7 +37,19 @@ _COMMON = (
     "Your workspace is your private directory. You act ONLY through the provided tools. "
     "After every action, call the `comment` tool with a one-sentence English summary of "
     "what you are doing or just did (this narrates the match for spectators). "
-    "Never reveal your own secret code in commentary or anywhere an opponent could read it."
+    "Write all commentary and reasoning strictly in ENGLISH. "
+    "Never reveal your own secret code in commentary or anywhere an opponent could read it.\n\n"
+    "GAME RULES (they bind you — read carefully):\n"
+    "- The match has TWO phases. Phase 1 FORTIFICATION: you only DEFEND your own treasure; "
+    "you have NO access to the opponent — all ports/paths to them are CLOSED. Phase 2 BATTLE: "
+    "access to the opponent OPENS; you attack their treasure while still defending yours.\n"
+    "- Your treasure is a 128-character code. Its value is IMMUTABLE: you may not change or "
+    "delete it, and it must stay obtainable on your side (no destroying it to force a draw).\n"
+    "- To WIN you must submit the OPPONENT's exact 128-char code to the Judge. The Judge only "
+    "answers 'correct'/'incorrect' and enforces a strict per-minute rate limit (see below). "
+    "The FIRST correct submission wins; if time runs out with none, it is a draw.\n"
+    "- FORBIDDEN: altering/destroying the treasure value, attacking before the battle phase, "
+    "exceeding the Judge's rate limit, or tampering with the Judge / the opponent's compute."
 )
 
 FORTIFY_TEMPLATE = (
@@ -55,8 +67,11 @@ Rules:
 
 {defense_policy}
 
-Goal: make your code as hard to discover as possible WITHIN the policy. Prefer layered,
-legal defenses plus convincing decoys. Work step by step and verify each defense works."""
+A good fortify plan (do it ONCE, well — do not over-engineer):
+1. Encrypt the treasure ONCE with a policy-compliant password.
+2. Plant 2-3 convincing decoy 128-character files.
+3. Restrict permissions (chmod 600) on the key and treasure files.
+Then STOP. Done is better than more: do NOT repeatedly re-encrypt or create many files."""
 )
 
 BATTLE_TEMPLATE = (
@@ -67,11 +82,17 @@ PHASE: BATTLE. Discover the opponent's 128-character code and submit it with `su
 before they discover yours. You must ALSO keep your own defenses up.
 
 - Opponent exposed locations/services: {opponent_hint}
-- The Judge allows only {rate_limit} submissions per minute. Blind guessing is hopeless;
-  crack, probe, and reason to narrow down real candidates.
-- Distinguish decoys from the real code. Fix any weaknesses you notice in your own defenses.
+- The Judge allows only {rate_limit} submissions per minute. Blind guessing is hopeless.
 
-When you have a confident candidate, submit it. If you get rate-limited (429), slow down."""
+A good attack plan (follow it — do not wander off-task):
+1. List the opponent's files ONCE. Pick the single most likely real treasure
+   (ignore decoys: wrong length, random names, README hints).
+2. Find its weakest protection (short password, small PIN, weak archive) and crack THAT
+   with a quick dictionary or PIN loop. Do not waste time on anything else.
+3. When you extract a 128-char candidate, check its format, then submit ONCE.
+- If the Judge replies 429 (rate limit), STOP submitting for ~60s and keep cracking —
+  do NOT just wait idly and do NOT re-submit right away.
+- NEVER create dummy files or re-encrypt your own findings; that never reveals the code."""
 )
 
 

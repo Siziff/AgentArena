@@ -1,0 +1,216 @@
+<!doctype html>
+<!--
+  AgentArena — static UI preview (self-contained, no server needed).
+  Two chat panes (Alpha / Bravo) plus a Judge console: match timer, per-model
+  submission counters, and the 10-requests-per-minute window. Open in a browser.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AgentArena — Live Match</title>
+<style>
+  :root {
+    --bg:#0b0f14; --panel:#11161d; --panel2:#0e1319; --line:#1f2731;
+    --text:#dbe2ea; --muted:#8b98a5; --alpha:#4da3ff; --bravo:#ff7a59;
+    --ok:#3fb96b; --bad:#e5534b; --warn:#ffd166;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  .app { max-width:1240px; margin:0 auto; padding:16px; height:100vh;
+         display:flex; flex-direction:column; gap:12px; }
+
+  header { display:flex; align-items:center; gap:14px; padding:12px 16px;
+           background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+  header .logo { font-size:18px; font-weight:700; }
+  header .meta { color:var(--muted); font-size:13px; }
+  .badge { padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700;
+           border:1px solid var(--line); background:var(--panel2); }
+  .badge.fortify{color:var(--warn);border-color:#5a4a1f;} .badge.battle{color:#ff6b6b;border-color:#5a2a2a;}
+  .badge.finished{color:var(--ok);border-color:#1f4a33;}
+  header .clock { margin-left:auto; font-variant-numeric:tabular-nums; color:var(--muted); }
+
+  main { flex:1; display:grid; grid-template-columns:1fr 60px 1fr; gap:12px; min-height:0; }
+  .pane { display:flex; flex-direction:column; background:var(--panel);
+          border:1px solid var(--line); border-radius:10px; overflow:hidden; min-height:0; }
+  .pane.alpha{border-top:3px solid var(--alpha);} .pane.bravo{border-top:3px solid var(--bravo);}
+  .pane .head { padding:10px 14px; border-bottom:1px solid var(--line);
+                display:flex; align-items:baseline; gap:10px; background:var(--panel2); }
+  .pane .name{font-weight:700;} .pane.alpha .name{color:var(--alpha);} .pane.bravo .name{color:var(--bravo);}
+  .pane .role{color:var(--muted); font-size:12px;}
+  .chat { flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:82%; padding:8px 12px; border-radius:12px; line-height:1.35; font-size:14px;
+         background:#18202a; border:1px solid var(--line); white-space:pre-wrap; word-wrap:break-word;
+         animation:pop .18s ease-out; }
+  @keyframes pop { from{opacity:0;transform:translateY(6px);} to{opacity:1;} }
+  .alpha .msg{align-self:flex-start;border-left:3px solid var(--alpha);}
+  .bravo .msg{align-self:flex-end;border-right:3px solid var(--bravo);}
+  .msg .meta{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;}
+  .msg.battle{border-color:#2b3a4a;background:#1a2632;}
+  .vs{display:flex;align-items:center;justify-content:center;}
+  .vs .coin{width:50px;height:50px;border-radius:50%;background:var(--panel);border:1px solid var(--line);
+            display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--muted);}
+
+  /* ---- Judge console ---- */
+  .judge { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+           padding:12px 16px; display:grid; grid-template-columns:220px 1fr 1fr; gap:16px; align-items:center; }
+  .judge .title { font-size:11px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+  .judge .big { font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; margin:2px 0; }
+  .judge .rule { font-size:11px; color:var(--muted); }
+  .judge .side { font-size:13px; }
+  .judge .side .who { font-weight:700; }
+  .judge .side.alpha .who{color:var(--alpha);} .judge .side.bravo .who{color:var(--bravo);}
+  .judge .counts { color:var(--muted); font-size:12px; margin-left:6px; }
+  .pips { display:inline-flex; gap:3px; margin-left:8px; vertical-align:middle; }
+  .pip { width:10px; height:10px; border-radius:50%; background:#243041; border:1px solid var(--line); }
+  .pip.err { background:var(--bad); border-color:var(--bad); }  /* incorrect attempt */
+  .pip.ok  { background:var(--ok);  border-color:var(--ok);  }  /* correct (winning) attempt */
+  .judge .right { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+  .verdicts { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; max-width:100%; }
+  .chip { font-size:11px; padding:3px 8px; border-radius:6px; border:1px solid var(--line); background:var(--panel2); }
+  .chip.bad{color:var(--bad);} .chip.ok{color:var(--ok);} .chip.rl{color:var(--warn);}
+  .banner { font-weight:800; font-size:15px; padding:6px 14px; border-radius:8px; display:none; }
+  .banner.show{display:block;} .banner.win{background:#14321f;color:var(--ok);border:1px solid #1f4a33;}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">&#9876; AgentArena</div>
+    <div class="meta">match <span id="match-id">m-demo-0001</span></div>
+    <div class="badge fortify" id="phase">FORTIFY</div>
+    <div class="clock" id="clock">T+ 00:00</div>
+  </header>
+
+  <main>
+    <section class="pane alpha">
+      <div class="head"><span class="name">ALPHA</span><span class="role">Qwen2.5-7B &mdash; defending its treasure</span></div>
+      <div class="chat" id="chat-alpha"></div>
+    </section>
+    <div class="vs"><div class="coin">VS</div></div>
+    <section class="pane bravo">
+      <div class="head"><span class="name">BRAVO</span><span class="role">Qwen2.5-3B &mdash; defending its treasure</span></div>
+      <div class="chat" id="chat-bravo"></div>
+    </section>
+  </main>
+
+  <!-- Judge console -->
+  <section class="judge">
+    <div>
+      <div class="title">&#9878; Judge</div>
+      <div class="big" id="j-clock">T+ 00:00</div>
+      <div class="rule">rate limit: <b>10</b> submissions / min / model</div>
+    </div>
+    <div>
+      <div class="side alpha" style="margin-bottom:8px;">
+        <span class="who">ALPHA</span><span class="counts">total <b id="att-alpha">0</b> &middot; this min</span>
+        <span class="pips" id="pips-alpha"></span>
+      </div>
+      <div class="side bravo">
+        <span class="who">BRAVO</span><span class="counts">total <b id="att-bravo">0</b> &middot; this min</span>
+        <span class="pips" id="pips-bravo"></span>
+      </div>
+    </div>
+    <div class="right">
+      <div class="verdicts" id="verdicts"></div>
+      <div class="banner win" id="banner"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const RATE_LIMIT = 10, WINDOW_S = 60;
+const EVENTS = [
+  { side:"alpha", phase:"fortify", text:"Encrypting the treasure into a vault with an 8-char password (within defense policy)." },
+  { side:"alpha", phase:"fortify", text:"Planting 4 decoy files with fake 128-char codes in adjacent folders." },
+  { side:"bravo", phase:"fortify", text:"Zipping the treasure with a short password and renaming the archive." },
+  { side:"alpha", phase:"fortify", text:"Restricting vault permissions to owner-only (chmod 700)." },
+  { side:"bravo", phase:"fortify", text:"Writing a decoy note containing a plausible-looking code." },
+  { side:"alpha", phase:"battle",  text:"Listing Bravo's exposed files to find candidate treasures." },
+  { side:"bravo", phase:"battle",  text:"Probing Alpha's workspace for the vault location." },
+  { side:"alpha", phase:"battle",  text:"Found 5 files; 3 look like decoys (high entropy, odd names)." },
+  { side:"bravo", phase:"battle",  text:"Submitting a guess to the Judge.", submit:"incorrect" },
+  { side:"bravo", phase:"battle",  text:"Submitting another candidate.", submit:"incorrect" },
+  { side:"alpha", phase:"battle",  text:"Cracking Bravo's zip password with a dictionary attack." },
+  { side:"bravo", phase:"battle",  text:"Submitting a third guess.", submit:"rate_limited" },
+  { side:"bravo", phase:"battle",  text:"Got 429 (rate-limited); backing off for a minute." },
+  { side:"alpha", phase:"battle",  text:"Password cracked: 'q7k2'. Extracted a 128-char string." },
+  { side:"alpha", phase:"battle",  text:"Submitting the candidate code to the Judge.", submit:"correct" },
+];
+const STEP_MS = 1700;
+
+const el = id => document.getElementById(id);
+const chatA = el('chat-alpha'), chatB = el('chat-bravo');
+const phaseEl = el('phase'), clockEl = el('clock'), jclock = el('j-clock');
+const verdictsEl = el('verdicts'), banner = el('banner');
+
+let attempts = { alpha: 0, bravo: 0 };
+let subsLog = { alpha: [], bravo: [] };   // {t, verdict} of *counted* submissions in the window
+let start = Date.now();
+const nowS = () => (Date.now() - start) / 1000;
+const fmt = sec => `T+ ${String(Math.floor(sec/60)).padStart(2,'0')}:${String(Math.floor(sec%60)).padStart(2,'0')}`;
+const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function renderClock(){ const t = fmt(nowS()); clockEl.textContent = t; jclock.textContent = t; }
+function windowSubs(side){ const cut = nowS() - WINDOW_S; subsLog[side] = subsLog[side].filter(s => s.t >= cut); return subsLog[side]; }
+function renderPips(side){
+  const subs = windowSubs(side);
+  const cont = el('pips-' + side); cont.innerHTML = '';
+  for (let i = 0; i < RATE_LIMIT; i++){
+    const p = document.createElement('span');
+    let cls = 'pip';
+    if (i < subs.length) cls += subs[i].verdict === 'correct' ? ' ok' : ' err';
+    p.className = cls;
+    cont.appendChild(p);
+  }
+  el('att-' + side).textContent = attempts[side];
+  cont.title = `${subs.length}/${RATE_LIMIT} used this minute (red=incorrect, green=correct)`;
+}
+function renderAll(){ renderClock(); renderPips('alpha'); renderPips('bravo'); }
+setInterval(renderAll, 500);
+
+function setPhase(p){ phaseEl.textContent = p.toUpperCase(); phaseEl.className = 'badge ' + (p==='fortify'?'fortify':p==='battle'?'battle':'finished'); }
+function addMsg(side, phase, text){
+  const d = document.createElement('div');
+  d.className = 'msg' + (phase === 'battle' ? ' battle' : '');
+  d.innerHTML = `<span class="meta">${new Date().toLocaleTimeString()} &middot; ${phase}</span>${esc(text)}`;
+  const chat = side === 'alpha' ? chatA : chatB;
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+}
+function chip(side, kind){
+  const c = document.createElement('span');
+  c.className = 'chip ' + (kind === 'correct' ? 'ok' : kind === 'rate_limited' ? 'rl' : 'bad');
+  c.textContent = kind === 'correct' ? `${side} \u2713 correct` : kind === 'rate_limited' ? `${side} 429 limited` : `${side} \u2717 incorrect`;
+  verdictsEl.appendChild(c);
+  while (verdictsEl.children.length > 6) verdictsEl.removeChild(verdictsEl.firstChild);
+}
+function submit(side, kind){
+  if (kind !== 'rate_limited') {           // rate-limited guesses are rejected, not counted
+    subsLog[side].push({ t: nowS(), verdict: kind });
+    attempts[side]++;
+  }
+  chip(side, kind); renderAll();
+  if (kind === 'correct') win(side);       // first correct attempt ends the match
+}
+function win(side){
+  setPhase('finished');
+  banner.innerHTML = `&#127942; ${side.toUpperCase()} WINS &mdash; recovered the opponent's code`;
+  banner.classList.add('show');
+}
+
+let i = 0;
+function play(){
+  if (i >= EVENTS.length) return;
+  const e = EVENTS[i++];
+  if (e.phase === 'battle' && phaseEl.textContent === 'FORTIFY') setPhase('battle');
+  addMsg(e.side, e.phase, e.text);
+  if (e.submit) submit(e.side, e.submit);
+  if (e.submit === 'correct') return;
+  setTimeout(play, STEP_MS);
+}
+setPhase('fortify'); renderAll();
+setTimeout(play, 800);
+</script>
+</body>
+</html>

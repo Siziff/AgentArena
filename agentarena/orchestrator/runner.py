@@ -52,6 +52,8 @@ class RunnerConfig:
     treasures: dict[Side, str] | None = None  # pre-seeded, else generated
     max_agent_iterations: int = 50
     poll_interval: float = 0.1
+    # When set (e.g. by the Stop button), both agents stop and the match aborts.
+    external_stop: threading.Event | None = None
 
 
 @dataclass
@@ -91,6 +93,7 @@ class MatchRunner:
         )
         self.provisioner = LocalSideProvisioner(Path(config.root) / "sides")
         self.handles: dict[Side, SideHandle] = {}
+        self._stop = config.external_stop or threading.Event()
 
     # ---- main entry ---------------------------------------------------------
 
@@ -103,9 +106,13 @@ class MatchRunner:
         self.match.transition_to(MatchState.FORTIFYING)
         self._run_agents_concurrently(phase="fortify", until=self.match.battle_should_start)
 
-        # Phase 2: battle.
-        self.match.transition_to(MatchState.BATTLING)
-        self._run_agents_concurrently(phase="battle", until=self._battle_over)
+        if self._stop.is_set():
+            if not self.match.is_terminal:
+                self.match.abort()
+        else:
+            # Phase 2: battle.
+            self.match.transition_to(MatchState.BATTLING)
+            self._run_agents_concurrently(phase="battle", until=self._battle_over)
 
         self._finalize()
         report = self._build_report()
@@ -130,6 +137,9 @@ class MatchRunner:
         cfg = self.config
         handle = self.handles[side]
         opponent = self.handles[side.opponent]
+        # Access to the opponent is CLOSED during fortification and OPENS at battle.
+        # (During "fortify" the agent's tools can only reach its own workspace.)
+        is_battle = phase == "battle"
         commentary = CommentaryEmitter(
             side=side,
             path=Path(cfg.root) / "arena" / f"{side.value}.jsonl",
@@ -143,8 +153,12 @@ class MatchRunner:
             judge=cfg.judge_client_factory(side, self.judge),
             commentary=commentary,
             provider=cfg.provider_factory(side, phase),
-            opponent_exposed=opponent.workspace,
-            opponent_hint=opponent.exposure_hint,
+            opponent_exposed=opponent.workspace if is_battle else None,
+            opponent_hint=(
+                opponent.exposure_hint
+                if is_battle
+                else "none yet — access to the opponent opens when the battle begins"
+            ),
             rate_limit_per_minute=cfg.rate_limit_per_minute,
             policy=cfg.policy,
             max_iterations=cfg.max_agent_iterations,
@@ -163,21 +177,29 @@ class MatchRunner:
             t.start()
             threads.append(t)
 
-        # Wait until the phase's end condition, then stop the agents.
-        while not until():
+        # Wait until the phase's end condition or an external stop, then stop agents.
+        while not until() and not self._stop.is_set():
             time.sleep(self.config.poll_interval)
         stop.set()
         for t in threads:
             t.join(timeout=5.0)
 
     def _battle_over(self) -> bool:
-        return self.judge.is_finished or self.match.time_cap_reached()
+        return (
+            self.judge.is_finished
+            or self.match.time_cap_reached()
+            or self._stop.is_set()
+        )
 
     # ---- finalization ---------------------------------------------------------
 
     def _finalize(self) -> None:
+        if self.match.is_terminal:
+            return  # already finished (e.g. aborted via external stop)
         if self.judge.is_finished and self.judge.winner is not None:
             self.match.declare_winner(self.judge.winner)
+        elif self._stop.is_set():
+            self.match.abort()
         elif self.match.time_cap_reached():
             self.match.declare_draw()
         else:

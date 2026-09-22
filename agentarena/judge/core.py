@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import enum
 import threading
+import time
+from collections import deque
 from dataclasses import dataclass, field
 
 from ..core.treasure import (
@@ -66,17 +68,18 @@ class JudgeCore:
     _winner: Side | None = field(default=None, init=False)
     _finished: bool = field(default=False, init=False)
     _limiter: SlidingWindowRateLimiter = field(init=False)
+    _clock: object = field(default=None, init=False, repr=False)
+    # (monotonic_ts, verdict) for every *evaluated* submission, per side.
+    _attempts_log: dict[Side, deque] = field(
+        default_factory=lambda: {Side.ALPHA: deque(), Side.BRAVO: deque()}, init=False
+    )
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        if self.clock is None:
-            self._limiter = SlidingWindowRateLimiter(
-                self.rate_limit_per_minute, self.window_seconds
-            )
-        else:
-            self._limiter = SlidingWindowRateLimiter(
-                self.rate_limit_per_minute, self.window_seconds, clock=self.clock
-            )
+        self._clock = self.clock if self.clock is not None else time.monotonic
+        self._limiter = SlidingWindowRateLimiter(
+            self.rate_limit_per_minute, self.window_seconds, clock=self._clock
+        )
 
     # ---- setup -------------------------------------------------------------
 
@@ -152,6 +155,7 @@ class JudgeCore:
             if digests_equal(guess, known):
                 self._finished = True
                 self._winner = side
+                self._attempts_log[side].append((self._clock(), Verdict.CORRECT))
                 return self._make(
                     OutcomeStatus.EVALUATED, side=side, verdict=Verdict.CORRECT,
                     remaining=decision.remaining,
@@ -161,6 +165,7 @@ class JudgeCore:
                     ),
                 )
 
+            self._attempts_log[side].append((self._clock(), Verdict.INCORRECT))
             return self._make(
                 OutcomeStatus.EVALUATED, side=side, verdict=Verdict.INCORRECT,
                 remaining=decision.remaining, detail="incorrect",
@@ -187,7 +192,20 @@ class JudgeCore:
                     "per_window": self.rate_limit_per_minute,
                     "window_seconds": self.window_seconds,
                 },
+                "window": {
+                    s.value: self._window_status(s) for s in (Side.ALPHA, Side.BRAVO)
+                },
             }
+
+    def _window_status(self, side: Side) -> dict:
+        """Per-side rate-limit window: count + ordered verdicts in the window."""
+        cutoff = self._clock() - self.window_seconds
+        verdicts = [v.value for ts, v in self._attempts_log[side] if ts >= cutoff]
+        return {
+            "used": len(verdicts),
+            "limit": self.rate_limit_per_minute,
+            "verdicts": verdicts,
+        }
 
     # ---- helpers -----------------------------------------------------------
 

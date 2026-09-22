@@ -69,6 +69,14 @@ class SlidingWindowRateLimiter:
         retry_after = (dq[0] + self.window_seconds) - now
         return RateDecision(False, 0, max(0.0, retry_after))
 
+    def usage(self, key: str) -> int:
+        """Current number of hits in the window for `key` (does not consume)."""
+        with self._lock:
+            now = self._clock()
+            dq = self._hits.setdefault(key, deque())
+            self._evict(dq, now)
+            return len(dq)
+
     def reset(self, key: str | None = None) -> None:
         """Clear state for one key or for all keys."""
         with self._lock:

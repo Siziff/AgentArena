@@ -53,6 +53,14 @@ class TestRateLimiter(unittest.TestCase):
         self.assertFalse(self.rl.allow("alpha").allowed)
         self.assertTrue(self.rl.allow("bravo").allowed)
 
+    def test_usage(self):
+        self.rl.allow("alpha")
+        self.rl.allow("alpha")
+        self.assertEqual(self.rl.usage("alpha"), 2)
+        self.assertEqual(self.rl.usage("bravo"), 0)
+        self.clock.advance(61)  # window slides past the hits
+        self.assertEqual(self.rl.usage("alpha"), 0)
+
     def test_invalid_args(self):
         with self.assertRaises(ValueError):
             SlidingWindowRateLimiter(limit=0, window_seconds=60)

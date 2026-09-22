@@ -9,9 +9,18 @@ dist/
 .venv/
 venv/
 
+# Local setup wizard output / local battle configs (may contain API keys)
+config/battle.generated.toml
+config/*.local.toml
+scripts/models.env
+
+# Local tooling & models (ollama binary, model weights, python venv) — large
+.tools/
+
 # Generated match artifacts
 arena_demo/
 arena_run/
+arena_battle*/
 **/reports/
 **/sides/
 **/arena/*.jsonl

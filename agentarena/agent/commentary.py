@@ -15,10 +15,33 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import re
+
 from ..core.treasure import DEFAULT_ALPHABET, DEFAULT_LENGTH
 from ..core.types import Side
+from .provider import _ACTION_RE, _FENCE_RE, strip_json_objects
 
-DEFAULT_MAX_LEN = 280
+DEFAULT_MAX_LEN = 600
+
+# whole paired blocks like <tool_call>...</tool_call> (removed with their content)
+_BLOCK_RE = re.compile(
+    r"<(?:tool_call|tool_response|function_calls?|invoke|tools?|response|"
+    r"thinking|thought|reasoning)\b[^>]*>.*?</(?:tool_call|tool_response|"
+    r"function_calls?|invoke|tools?|response|thinking|thought|reasoning)\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+# tool/special-token tags to strip from commentary (e.g. <tool_call>, <|im_start|>)
+_TAG_RE = re.compile(
+    r"<\|[^>]*\|>|</?(?:tool_call|tool_response|function_calls?|invoke|tools?|"
+    r"response|thinking|thought|reasoning)[^>]*>",
+    re.IGNORECASE,
+)
+# leading "COMMENT"/"THOUGHT"/"ACTION" style prefixes the model sometimes adds,
+# including garbled variants like "AÇÃO" (mangled "ACTION").
+_PREFIX_RE = re.compile(
+    r"^\s*(?:COMMENTARY|COMMENT|NOTE|THOUGHT|THINKING|ACTION|A[CÇ][ÃAà]O|ACAO)\b\s*[:\-–]?\s*",
+    re.IGNORECASE,
+)
 
 
 def _redaction_pattern(alphabet: str, length: int) -> re.Pattern[str]:
@@ -52,23 +75,43 @@ class CommentaryEmitter:
         self._secret = secret
         self._pattern = _redaction_pattern(alphabet, treasure_length)
         self.entries: list[CommentaryEntry] = []
+        self._last_text: str | None = None
         self._lock = threading.Lock()
         if self.path:
             self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def _clean(self, text: str) -> str:
-        text = " ".join(str(text).split())  # collapse whitespace/newlines
+        text = str(text)
+        # drop code fences and ACTION/tool lines entirely
+        lines = [
+            ln for ln in str(text).splitlines()
+            if not _FENCE_RE.match(ln) and not _ACTION_RE.match(ln)
+        ]
+        text = " ".join(lines)
+        # strip any {"name": ...} / JSON objects (command & tool dumps)
+        text = strip_json_objects(text)
+        # strip whole tool blocks, then lone tool/special-token tags, then prefixes
+        text = _BLOCK_RE.sub(" ", text)
+        text = _TAG_RE.sub(" ", text)
+        # strip leading action/comment prefixes (loop to catch stacked ones)
+        for _ in range(3):
+            text = _PREFIX_RE.sub("", text)
+        # collapse whitespace/newlines
+        text = " ".join(text.split())
         if self._secret:
             text = text.replace(self._secret, "[redacted-secret]")
         text = self._pattern.sub("[redacted]", text)
         if len(text) > self.max_len:
             text = text[: self.max_len - 1].rstrip() + "…"
-        return text
+        return text.strip()
 
-    def emit(self, text: str, phase: str = "unknown") -> CommentaryEntry:
-        entry = CommentaryEntry(
-            side=self.side.value, phase=phase, text=self._clean(text)
-        )
+    def emit(self, text: str, phase: str = "unknown") -> CommentaryEntry | None:
+        cleaned = self._clean(text)
+        # skip empty (e.g. pure JSON/logs) and consecutive duplicates
+        if not cleaned or cleaned == self._last_text:
+            return None
+        self._last_text = cleaned
+        entry = CommentaryEntry(side=self.side.value, phase=phase, text=cleaned)
         with self._lock:
             self.entries.append(entry)
             if self.path:

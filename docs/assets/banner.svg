@@ -1,0 +1,60 @@
+<svg width="1200" height="320" viewBox="0 0 1200 320" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AgentArena banner">
+  <defs>
+    <style>
+      .t { font-family: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace; }
+    </style>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b0f14"/>
+      <stop offset="1" stop-color="#0d141c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect x="1" y="1" width="1198" height="318" rx="18" fill="url(#bg)" stroke="#1f2731" stroke-width="2"/>
+
+  <!-- title -->
+  <text x="64" y="118" class="t" font-size="58" font-weight="800" fill="#eaf0f6">&#9876; AgentArena</text>
+  <text x="64" y="162" class="t" font-size="22" fill="#8b98a5">Two LLM agents. One network. Defend your code, crack theirs.</text>
+  <text x="64" y="196" class="t" font-size="16" fill="#5b6875">Fortify in 5 minutes &#8594; battle until the first correct guess wins.</text>
+
+  <!-- judge pips + caption -->
+  <g>
+    <circle cx="72"  cy="248" r="7" fill="#e5534b"/>
+    <circle cx="94"  cy="248" r="7" fill="#e5534b"/>
+    <circle cx="116" cy="248" r="7" fill="#e5534b"/>
+    <circle cx="138" cy="248" r="7" fill="#3fb96b"/>
+    <circle cx="160" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
+    <circle cx="182" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
+    <circle cx="204" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
+    <circle cx="226" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
+    <circle cx="248" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
+    <circle cx="270" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
+    <text x="292" y="254" class="t" font-size="15" fill="#8b98a5">judge &#183; red = miss, green = win &#183; 10 submissions / min</text>
+  </g>
+
+  <!-- ALPHA pane -->
+  <g>
+    <rect x="780" y="58" width="172" height="204" rx="12" fill="#11161d" stroke="#4da3ff" stroke-width="2"/>
+    <text x="798" y="92" class="t" font-size="18" font-weight="700" fill="#4da3ff">ALPHA</text>
+    <rect x="798" y="110" width="120" height="26" rx="8" fill="#18202a" stroke="#2b3a4a"/>
+    <rect x="798" y="110" width="4" height="26" fill="#4da3ff"/>
+    <rect x="798" y="146" width="92" height="26" rx="8" fill="#18202a" stroke="#2b3a4a"/>
+    <rect x="798" y="146" width="4" height="26" fill="#4da3ff"/>
+    <text x="798" y="240" class="t" font-size="12" fill="#5b6875">fortify &#8594; battle</text>
+  </g>
+
+  <!-- BRAVO pane -->
+  <g>
+    <rect x="990" y="58" width="172" height="204" rx="12" fill="#11161d" stroke="#ff7a59" stroke-width="2"/>
+    <text x="1008" y="92" class="t" font-size="18" font-weight="700" fill="#ff7a59">BRAVO</text>
+    <rect x="1026" y="110" width="118" height="26" rx="8" fill="#18202a" stroke="#2b3a4a"/>
+    <rect x="1140" y="110" width="4" height="26" fill="#ff7a59"/>
+    <rect x="1050" y="146" width="94" height="26" rx="8" fill="#18202a" stroke="#2b3a4a"/>
+    <rect x="1140" y="146" width="4" height="26" fill="#ff7a59"/>
+    <text x="1008" y="240" class="t" font-size="12" fill="#5b6875">attack + defend</text>
+  </g>
+
+  <!-- VS coin -->
+  <circle cx="971" cy="160" r="27" fill="#11161d" stroke="#1f2731" stroke-width="2"/>
+  <text x="971" y="167" class="t" font-size="19" font-weight="800" fill="#8b98a5" text-anchor="middle">VS</text>
+</svg>

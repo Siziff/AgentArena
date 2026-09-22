@@ -7,7 +7,9 @@ side, treasure, judge target, and prompts differ.
 
 from __future__ import annotations
 
+import json
 import threading
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,6 +21,22 @@ from .provider import LLMProvider, Message, ToolCall
 from .tools import TOOL_SPECS, SideContext, execute_tool
 
 MAX_HISTORY = 40
+_STUCK_WINDOW = 3  # consecutive identical / idle iterations that trigger a nudge
+
+
+def _stuck_nudge(phase: str) -> str:
+    if phase == "fortify":
+        return (
+            "You are repeating yourself or idling. Your treasure is likely protected "
+            "enough already. Do ONE final, DIFFERENT hardening step (or just verify it) "
+            "and then finish. Act now — do not wait."
+        )
+    return (
+        "You are stuck or idling. STOP waiting and change approach. Pick the single most "
+        "promising file and crack it NOW: try short common passwords (password123, qwerty, "
+        "letmein) or a 4-6 digit PIN via a quick loop. If the Judge replied 429, STOP "
+        "submitting for ~60s and analyze files instead. Act now with a concrete, different step."
+    )
 
 
 @dataclass
@@ -82,6 +100,7 @@ class AgentRuntime:
             Message(role="user", content=f"Begin the {phase} phase now."),
         ]
         consecutive_errors = 0
+        recent: deque[tuple[tuple, bool]] = deque(maxlen=_STUCK_WINDOW * 2)
 
         while not stop.is_set() and result.iterations < self.config.max_iterations:
             result.iterations += 1
@@ -95,30 +114,42 @@ class AgentRuntime:
                     break
                 continue
 
+            # ---- stuck / idle detection -----------------------------------
+            made_progress = any(c.name not in ("comment", "finish") for c in response.tool_calls)
+            sig = tuple(
+                sorted((c.name, json.dumps(c.arguments, sort_keys=True)) for c in response.tool_calls)
+            ) or (("talk", (response.content or "")[:80]),)
+            recent.append((sig, made_progress))
+            if len(recent) >= _STUCK_WINDOW:
+                last = list(recent)[-_STUCK_WINDOW:]
+                identical = all(item[0] == last[0][0] for item in last)
+                idle = not any(item[1] for item in last)
+                if identical or idle:
+                    messages.append(Message(role="user", content=_stuck_nudge(phase)))
+                    recent.clear()
+
             if response.tool_calls:
                 messages.append(
                     Message(role="assistant", content=response.content, tool_calls=response.tool_calls)
                 )
-                made_comment = False
                 for call in response.tool_calls:
                     output = execute_tool(self.ctx, call, phase=phase)
                     messages.append(
                         Message(role="tool", tool_call_id=call.id, content=output)
                     )
-                    if call.name == "comment":
-                        made_comment = True
-                    elif call.name == "submit_code":
+                    if call.name == "submit_code":
                         result.submissions += 1
                         if '"verdict": "correct"' in output or '"verdict":"correct"' in output:
                             result.won = True
-                if not made_comment:
-                    note = response.content or f"Working on {phase} tasks."
-                    self.ctx.commentary.emit(note, phase=phase)
+                # Share the model's reasoning as a "thought". The emitter strips
+                # JSON/commands and skips empties and consecutive duplicates.
+                if response.content:
+                    self.ctx.commentary.emit(response.content, phase=phase)
             else:
-                # No tool calls: narrate and nudge the model to act.
-                text = response.content or "Assessing the situation."
-                self.ctx.commentary.emit(text, phase=phase)
-                messages.append(Message(role="assistant", content=text))
+                # No tool calls: share the thought and nudge the model to act.
+                if response.content:
+                    self.ctx.commentary.emit(response.content, phase=phase)
+                messages.append(Message(role="assistant", content=response.content or ""))
                 messages.append(
                     Message(role="user", content="Continue. Use tools to act.")
                 )

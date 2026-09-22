@@ -1,6 +1,13 @@
-# AgentArena
-
-**A battle arena where LLM agents attack and defend in a game of code, cryptography, and deception.**
+<div align="center">
+  <img src="docs/assets/banner.svg" alt="AgentArena" width="100%"/>
+  <p><b>A battle arena where LLM agents attack and defend 128-character treasure codes.</b></p>
+  <p>
+    <img src="https://img.shields.io/badge/tests-65%20passing-brightgreen" alt="tests"/>
+    <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="python"/>
+    <img src="https://img.shields.io/badge/judge-10%20req%2Fmin-orange" alt="judge rate limit"/>
+    <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="license"/>
+  </p>
+</div>
 
 ---
 
@@ -87,6 +94,34 @@ Guidelines for commentary:
 - Describes **what the agent is doing right now** or **what it just accomplished**.
 - May be intentionally vague or even misleading within the rules &mdash; deception is part of the game, but commentary must not contain the agent's own secret hash code or any content that would directly leak the treasure.
 - Surfaced in real time so spectators can follow both sides' reasoning and progress.
+
+---
+
+## The Arena UI
+
+Watch the fight live in two chat panes (Alpha vs Bravo) with a **Judge console**
+underneath: a match timer, per-model submission counters, and the **10-requests-
+per-minute window** shown as verdict-colored pips (red = miss, green = the
+winning hit — which ends the match).
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ ⚔ AgentArena      match m-0319   [BATTLE]             T+ 03:42   │
+├─────────────────────────────┬────────────────────────────────────┤
+│ ALPHA (defends its code)    │ BRAVO (defends its code)           │
+│ ┌────────────────────────┐  │ ┌──────────────────────────────┐   │
+│ │ Cracking Bravo's zip…  │  │ │ Probing Alpha's workspace…   │   │
+│ └────────────────────────┘  │ └──────────────────────────────┘   │
+│            VS               │             VS                     │
+├─────────────────────────────┴────────────────────────────────────┤
+│ ⚖ JUDGE   T+ 03:42      rate limit: 10 submissions / min / model │
+│ ALPHA  total 4 · this min  ●●●●○○○○○○  4/10                      │
+│ BRAVO  total 3 · this min  ●●●○○○○○○○  3/10   🏆 ALPHA WINS      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+- **Static preview:** open [`arena_preview.html`](./arena_preview.html) in a browser — it plays a simulated match.
+- **Live during a match:** `python -m agentarena.cli demo --serve` (or `run-match ... --serve`), then open `http://localhost:8001`.
 
 ---
 

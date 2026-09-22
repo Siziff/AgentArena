@@ -1,0 +1,29 @@
+# Real-model battle config: two local vLLM servers (no API keys needed).
+#   Alpha -> Qwen2.5-7B-Instruct  on GPU, http://127.0.0.1:9001/v1
+#   Bravo -> Qwen2.5-3B-Instruct  on GPU, http://127.0.0.1:9002/v1
+# Start the servers with scripts/serve_models.sh, then:
+#   python -m agentarena.cli battle --config config/battle.vllm.toml
+
+[match]
+fortify_seconds = 60        # 1-minute fortification for the first test
+max_match_seconds = 1800    # hard cap -> draw
+rate_limit_per_minute = 10
+max_agent_iterations = 40
+
+[llm]
+# Text action protocol: robust for small models with weak native tool-calling.
+provider = "openai_text"
+api_key = "EMPTY"           # vLLM ignores auth; a placeholder value is fine
+temperature = 0.3
+max_tokens = 1024
+
+[llm.alpha]
+base_url = "http://127.0.0.1:9001/v1"
+model = "Qwen/Qwen2.5-7B-Instruct"
+
+[llm.bravo]
+base_url = "http://127.0.0.1:9002/v1"
+model = "Qwen/Qwen2.5-3B-Instruct"
+
+[isolation]
+backend = "local"

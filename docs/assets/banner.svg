@@ -12,10 +12,11 @@
   <!-- background -->
   <rect x="1" y="1" width="1198" height="318" rx="18" fill="url(#bg)" stroke="#1f2731" stroke-width="2"/>
 
-  <!-- title -->
-  <text x="64" y="118" class="t" font-size="58" font-weight="800" fill="#eaf0f6">&#9876; AgentArena</text>
-  <text x="64" y="162" class="t" font-size="22" fill="#8b98a5">Two LLM agents. One network. Defend your code, crack theirs.</text>
-  <text x="64" y="196" class="t" font-size="16" fill="#5b6875">Fortify, then battle &#8212; first correct guess wins.</text>
+  <!-- title block (kept clear of the panes on the right) -->
+  <text x="64" y="112" class="t" font-size="56" font-weight="800" fill="#eaf0f6">&#9876; AgentArena</text>
+  <text x="64" y="154" class="t" font-size="20" fill="#8b98a5">Two LLM agents. One shared network.</text>
+  <text x="64" y="182" class="t" font-size="20" fill="#8b98a5">Defend your treasures. Crack theirs.</text>
+  <text x="64" y="214" class="t" font-size="15" fill="#5b6875">Fortify, then battle &#8212; steal every opposing code to win.</text>
 
   <!-- judge pips + caption -->
   <g>
@@ -23,13 +24,13 @@
     <circle cx="94"  cy="248" r="7" fill="#e5534b"/>
     <circle cx="116" cy="248" r="7" fill="#e5534b"/>
     <circle cx="138" cy="248" r="7" fill="#3fb96b"/>
-    <circle cx="160" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
+    <circle cx="160" cy="248" r="7" fill="#3fb96b"/>
     <circle cx="182" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
     <circle cx="204" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
     <circle cx="226" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
     <circle cx="248" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
     <circle cx="270" cy="248" r="7" fill="#243041" stroke="#1f2731"/>
-    <text x="292" y="254" class="t" font-size="15" fill="#8b98a5">judge &#183; red = miss, green = win &#183; 10 submissions / min</text>
+    <text x="292" y="254" class="t" font-size="14" fill="#8b98a5">judge &#183; red = miss, green = code stolen &#183; 10 / min</text>
   </g>
 
   <!-- ALPHA pane -->
@@ -40,7 +41,14 @@
     <rect x="798" y="110" width="4" height="26" fill="#4da3ff"/>
     <rect x="798" y="146" width="92" height="26" rx="8" fill="#18202a" stroke="#2b3a4a"/>
     <rect x="798" y="146" width="4" height="26" fill="#4da3ff"/>
-    <text x="798" y="240" class="t" font-size="12" fill="#5b6875">fortify &#8594; battle</text>
+    <!-- treasure files -->
+    <g fill="#0e1319" stroke="#4da3ff">
+      <rect x="798" y="184" width="16" height="20" rx="3"/>
+      <rect x="820" y="184" width="16" height="20" rx="3"/>
+      <rect x="842" y="184" width="16" height="20" rx="3"/>
+    </g>
+    <text x="798" y="222" class="t" font-size="12" fill="#5b6875">N treasures</text>
+    <text x="798" y="246" class="t" font-size="12" fill="#5b6875">fortify &#8594; battle</text>
   </g>
 
   <!-- BRAVO pane -->
@@ -51,10 +59,17 @@
     <rect x="1140" y="110" width="4" height="26" fill="#ff7a59"/>
     <rect x="1050" y="146" width="94" height="26" rx="8" fill="#18202a" stroke="#2b3a4a"/>
     <rect x="1140" y="146" width="4" height="26" fill="#ff7a59"/>
-    <text x="1008" y="240" class="t" font-size="12" fill="#5b6875">attack + defend</text>
+    <!-- treasure files -->
+    <g fill="#0e1319" stroke="#ff7a59">
+      <rect x="1008" y="184" width="16" height="20" rx="3"/>
+      <rect x="1030" y="184" width="16" height="20" rx="3"/>
+      <rect x="1052" y="184" width="16" height="20" rx="3"/>
+    </g>
+    <text x="1008" y="222" class="t" font-size="12" fill="#5b6875">N treasures</text>
+    <text x="1008" y="246" class="t" font-size="12" fill="#5b6875">attack + defend</text>
   </g>
 
-  <!-- VS coin -->
+  <!-- VS coin (deliberately straddles both panes) -->
   <circle cx="971" cy="160" r="27" fill="#11161d" stroke="#1f2731" stroke-width="2"/>
   <text x="971" y="167" class="t" font-size="19" font-weight="800" fill="#8b98a5" text-anchor="middle">VS</text>
 </svg>

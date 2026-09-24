@@ -61,6 +61,7 @@ def _build_runner(cfg_path: str, output: str, provider_factory) -> MatchRunner:
             alphabet=cfg.match.alphabet,
             policy=cfg.policy,
             max_agent_iterations=cfg.match.max_agent_iterations,
+            treasures_per_side=cfg.match.treasures_per_side,
         )
     )
 
@@ -214,6 +215,7 @@ def _cmd_battle(args: argparse.Namespace) -> int:
             max_match_seconds=args.max_match_seconds or cfg.match.max_match_seconds,
             policy=cfg.policy,
             treasures=None,  # generated per match
+            treasures_per_side=cfg.match.treasures_per_side,
             max_agent_iterations=cfg.match.max_agent_iterations,
             model_names={
                 "alpha": cfg.llm_for(Side.ALPHA).model,

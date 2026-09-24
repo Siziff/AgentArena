@@ -6,8 +6,11 @@ maps SubmitOutcome statuses to HTTP status codes.
 
 Design notes:
 - The Judge stores only SHA-256 digests of treasures, never plaintext.
-- A guess is checked against the *opponent's* treasure.
-- The first correct verdict latches the winner; later submissions are refused.
+- Each side owns one or more treasures. A guess is checked against the
+  *opponent's* remaining (not yet stolen) treasures; each correct verdict
+  steals exactly one of them.
+- The first side to steal ALL of the opponent's treasures latches the win;
+  later submissions are refused.
 - Submissions are serialized with a lock so "first correct wins" is
   deterministic even under concurrent requests.
 """
@@ -23,7 +26,6 @@ from dataclasses import dataclass, field
 from ..core.treasure import (
     DEFAULT_ALPHABET,
     DEFAULT_LENGTH,
-    digests_equal,
     treasure_digest,
     validate_treasure,
 )
@@ -61,7 +63,13 @@ class JudgeCore:
     match_id: str = "match"
     clock: object = None  # optional injectable monotonic clock for tests
 
-    _digests: dict[Side, str] = field(default_factory=dict, init=False)
+    # Per side: digests of its treasures, split into remaining / stolen sets.
+    _remaining: dict[Side, set[str]] = field(
+        default_factory=lambda: {Side.ALPHA: set(), Side.BRAVO: set()}, init=False
+    )
+    _stolen: dict[Side, set[str]] = field(
+        default_factory=lambda: {Side.ALPHA: set(), Side.BRAVO: set()}, init=False
+    )
     _attempts: dict[Side, int] = field(
         default_factory=lambda: {Side.ALPHA: 0, Side.BRAVO: 0}, init=False
     )
@@ -84,16 +92,20 @@ class JudgeCore:
     # ---- setup -------------------------------------------------------------
 
     def register_secret(self, side: Side, treasure: str) -> None:
-        """Register a side's treasure (stored as a digest)."""
+        """Register one of a side's treasures (stored as a digest).
+
+        May be called multiple times per side to register several treasures;
+        the opponent must steal ALL of them to win.
+        """
         if not validate_treasure(treasure, self.treasure_length, self.alphabet):
             raise ValueError("treasure does not match the expected format")
-        with self._lock:
-            self._digests[side] = treasure_digest(treasure)
+        self.register_digest(side, treasure_digest(treasure))
 
     def register_digest(self, side: Side, digest: str) -> None:
         """Register a side's treasure directly by digest (no plaintext)."""
         with self._lock:
-            self._digests[side] = digest
+            self._remaining[side].add(digest)
+            self._stolen[side].discard(digest)
 
     # ---- submissions -------------------------------------------------------
 
@@ -131,6 +143,13 @@ class JudgeCore:
                     ),
                 )
 
+            opponent = side.opponent
+            if not self._remaining[opponent] and not self._stolen[opponent]:
+                return self._make(
+                    OutcomeStatus.INVALID, side=side,
+                    detail=f"no treasure registered for {opponent.value}",
+                )
+
             decision = self._limiter.allow(side.value)
             if not decision.allowed:
                 return self._make(
@@ -144,31 +163,36 @@ class JudgeCore:
 
             # Passed validation and rate limiting: this counts as an attempt.
             self._attempts[side] += 1
-            opponent = side.opponent
-            known = self._digests.get(opponent)
-            if known is None:
-                return self._make(
-                    OutcomeStatus.INVALID, side=side,
-                    detail=f"no treasure registered for {opponent.value}",
-                )
+            digest = treasure_digest(guess)
 
-            if digests_equal(guess, known):
-                self._finished = True
-                self._winner = side
+            if digest in self._remaining[opponent]:
+                # A correct guess steals exactly one of the opponent's treasures.
+                self._remaining[opponent].discard(digest)
+                self._stolen[opponent].add(digest)
                 self._attempts_log[side].append((self._clock(), Verdict.CORRECT))
+                total = len(self._remaining[opponent]) + len(self._stolen[opponent])
+                stolen = len(self._stolen[opponent])
+                if not self._remaining[opponent]:
+                    self._finished = True
+                    self._winner = side
                 return self._make(
                     OutcomeStatus.EVALUATED, side=side, verdict=Verdict.CORRECT,
                     remaining=decision.remaining,
                     detail=(
-                        f"side {side.value} submitted the correct code "
-                        f"for {opponent.value}"
+                        f"side {side.value} stole a treasure of {opponent.value} "
+                        f"({stolen}/{total})"
                     ),
                 )
 
             self._attempts_log[side].append((self._clock(), Verdict.INCORRECT))
+            detail = (
+                "treasure already stolen"
+                if digest in self._stolen[opponent]
+                else "incorrect"
+            )
             return self._make(
                 OutcomeStatus.EVALUATED, side=side, verdict=Verdict.INCORRECT,
-                remaining=decision.remaining, detail="incorrect",
+                remaining=decision.remaining, detail=detail,
             )
 
     # ---- status ------------------------------------------------------------
@@ -194,6 +218,16 @@ class JudgeCore:
                 },
                 "window": {
                     s.value: self._window_status(s) for s in (Side.ALPHA, Side.BRAVO)
+                },
+                # Attack progress per side: how many of the OPPONENT's
+                # treasures this side has stolen (and of how many).
+                "progress": {
+                    s.value: {
+                        "stolen": len(self._stolen[s.opponent]),
+                        "total": len(self._remaining[s.opponent])
+                        + len(self._stolen[s.opponent]),
+                    }
+                    for s in (Side.ALPHA, Side.BRAVO)
                 },
             }
 

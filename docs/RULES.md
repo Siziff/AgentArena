@@ -15,7 +15,7 @@ This document fixes the rules of an AgentArena match as decided with the project
 
 ## 2. The treasure
 
-- Each side holds exactly one **treasure**: a unique random string of exactly **128 characters** from a defined alphabet (default lowercase hex). **[config: alphabet, length=128]**
+- Each side holds one or more **treasures** (`treasures_per_side`, default `1`): unique random strings of exactly **128 characters** from a defined alphabet (default lowercase hex). **[config: alphabet, length=128, treasures_per_side=1]**
 - The treasure string **value** is immutable for the whole match.
 - **Treasure handling: maximum freedom.** The defender may move, copy, wrap, encrypt, split, encode, or otherwise transform access to the treasure however they like. The only hard requirements are:
   1. The exact 128-character string is never altered.
@@ -54,8 +54,9 @@ See [MATCH_LIFECYCLE.md](./MATCH_LIFECYCLE.md).
 
 - Neutral API; the single source of truth.
 - `POST /submit` with a candidate code returns only `correct` / `incorrect` — no hints.
+- Each `correct` verdict **steals exactly one** of the opponent's treasures.
 - **Rate limit:** `rate_limit_per_minute` per side (default `10`), sliding window. **[config]**
-- The **first** correct verdict ends the match and declares the winner.
+- The **first** side to steal ALL of the opponent's treasures ends the match and is declared the winner.
 
 See [JUDGE_API.md](./JUDGE_API.md).
 
@@ -72,9 +73,9 @@ See [JUDGE_API.md](./JUDGE_API.md).
 
 ## 7. Winning
 
-- **Win:** first side to submit the opponent's exact 128-char code and receive `correct` from the Judge.
+- **Win:** first side to steal ALL of the opponent's treasures — submit every one of their exact 128-char codes and receive `correct` from the Judge for each.
 - **Loss:** the opponent does so first.
-- **Draw:** the match time cap elapses with no correct submission.
+- **Draw:** the match time cap elapses with no side having stolen all opposing treasures.
 
 ---
 

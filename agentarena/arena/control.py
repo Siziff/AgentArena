@@ -1,8 +1,9 @@
 """Match-control server: a setup screen + live arena in one page.
 
 Flow:
-1. GET / shows a setup overlay with the match parameters (for now: the stage-1
-   fortification duration, default 60s) and a "Start battle" button.
+1. GET / shows a setup overlay with the match parameters (stage-1 fortification
+   duration, default 60s, and the number of treasures per side, default 1) and
+   a "Start battle" button.
 2. POST /api/start launches a MatchRunner in a background thread.
 3. The overlay hides and the live arena (two chat panes + judge console) is
    shown, driven by /feed (commentary) and /status (judge + match).
@@ -31,6 +32,9 @@ from .feed import FeedStore
 
 class StartRequest(BaseModel):
     fortify_seconds: int = Field(default=60, ge=0, le=3600)
+    # how many treasures EACH side hides; the winner steals ALL of the opponent's.
+    # None -> the controller's configured default is used.
+    treasures_per_side: int | None = Field(default=None, ge=1, le=10)
     # one-click canned system check: forces a 60s fortify with the reference models
     test: bool = False
     # room for future battle parameters (rate limit, models, policy, ...)
@@ -46,7 +50,8 @@ class MatchController:
         rate_limit_per_minute: int = 10,
         max_match_seconds: int = 0,
         policy: DefensePolicy | None = None,
-        treasures: dict[Side, str] | None = None,
+        treasures: dict[Side, str | list[str]] | None = None,
+        treasures_per_side: int = 1,
         max_agent_iterations: int = 50,
         model_names: dict[str, str] | None = None,
     ) -> None:
@@ -56,6 +61,7 @@ class MatchController:
         self.max_match_seconds = max_match_seconds
         self.policy = policy or DefensePolicy()
         self.treasures = treasures
+        self.treasures_per_side = treasures_per_side
         self.max_agent_iterations = max_agent_iterations
         self.model_names = model_names or {}
 
@@ -68,6 +74,12 @@ class MatchController:
 
     def start(self, req: StartRequest) -> dict:
         fortify_seconds = 60 if req.test else req.fortify_seconds
+        # The canned system check stays a single-treasure battle; explicit
+        # pre-seeded treasures always win over the requested count.
+        if req.test:
+            treasures_per_side = 1
+        else:
+            treasures_per_side = req.treasures_per_side or self.treasures_per_side
         with self._lock:
             if self.state == "running":
                 raise RuntimeError("a match is already running")
@@ -87,6 +99,7 @@ class MatchController:
                     rate_limit_per_minute=self.rate_limit_per_minute,
                     policy=self.policy,
                     treasures=self.treasures,
+                    treasures_per_side=treasures_per_side,
                     max_agent_iterations=self.max_agent_iterations,
                     external_stop=self._stop_event,
                 )
@@ -284,10 +297,12 @@ _CONTROL_HTML = """<!doctype html>
       <div class="side alpha" style="margin-bottom:8px;">
         <span class="who">ALPHA</span><span class="counts">total <b id="att-alpha">0</b> &middot; this min</span>
         <span class="pips" id="pips-alpha"></span>
+        <span class="counts">&middot; treasures stolen <b id="st-alpha">0/1</b></span>
       </div>
       <div class="side bravo">
         <span class="who">BRAVO</span><span class="counts">total <b id="att-bravo">0</b> &middot; this min</span>
         <span class="pips" id="pips-bravo"></span>
+        <span class="counts">&middot; treasures stolen <b id="st-bravo">0/1</b></span>
       </div>
     </div>
     <div class="right">
@@ -313,6 +328,12 @@ _CONTROL_HTML = """<!doctype html>
     <div class="field">
       <label for="fortify">Stage 1 &mdash; Fortification duration (seconds)</label>
       <input id="fortify" type="number" min="0" max="3600" step="1" value="60" />
+    </div>
+    <div class="field">
+      <label for="treasures">Treasures per side</label>
+      <input id="treasures" type="number" min="1" max="10" step="1" value="__TREASURES_DEFAULT__" />
+      <div class="hint">Each side hides this many 128-char codes. To win, an agent must
+        steal ALL of the opponent's treasures &mdash; one correct submission per code.</div>
     </div>
     <button class="startbtn" id="startbtn" onclick="startBattle()">Start battle</button>
     <div class="err" id="err"></div>
@@ -351,9 +372,11 @@ async function startBattle(){
   testMode = false;
   $('err').textContent = ''; $('startbtn').disabled = true;
   const fortify = parseInt($('fortify').value || '60', 10);
+  let treasures = parseInt($('treasures').value || '1', 10);
+  if (!(treasures >= 1 && treasures <= 10)) treasures = 1;
   try {
     const r = await fetch('/api/start', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ fortify_seconds: fortify }) });
+      body: JSON.stringify({ fortify_seconds: fortify, treasures_per_side: treasures }) });
     const body = await r.json();
     if (!r.ok) { $('err').textContent = body.error || 'failed to start'; $('startbtn').disabled = false; return; }
     enterArena(body.match_id);
@@ -374,7 +397,7 @@ async function startTest(){
   $('err').textContent = ''; $('syscheck').textContent = ''; $('testbtn').disabled = true;
   try {
     const r = await fetch('/api/start', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ test: true, fortify_seconds: 60 }) });
+      body: JSON.stringify({ test: true, fortify_seconds: 60, treasures_per_side: 1 }) });
     const body = await r.json();
     if (!r.ok) { $('err').textContent = body.error || 'failed to start'; $('testbtn').disabled = false; return; }
     enterArena(body.match_id);
@@ -386,6 +409,7 @@ function enterArena(matchId){
   $('chat-alpha').innerHTML = ''; $('chat-bravo').innerHTML = '';
   $('att-alpha').textContent = 0; $('att-bravo').textContent = 0;
   $('pips-alpha').innerHTML = ''; $('pips-bravo').innerHTML = '';
+  $('st-alpha').textContent = '0/?'; $('st-bravo').textContent = '0/?';
   $('banner').classList.remove('show'); $('feed-status').textContent = 'live';
   $('match-id').textContent = matchId || '—';
   $('overlay').classList.add('hidden');
@@ -431,7 +455,7 @@ function renderPips(side, verdicts, limit){
     if (i < verdicts.length) cls += verdicts[i] === 'correct' ? ' ok' : ' err';
     p.className = cls; c.appendChild(p);
   }
-  c.title = verdicts.length + '/' + limit + ' used this minute (red=miss, green=win)';
+  c.title = verdicts.length + '/' + limit + ' used this minute (red=miss, green=treasure stolen)';
 }
 function setPhase(state){
   const map = { fortifying:'FORTIFY', battling:'BATTLE', finished:'FINISHED', provisioning:'SETUP' };
@@ -455,6 +479,11 @@ async function pollStatus(){
         $('att-alpha').textContent = att.alpha || 0; $('att-bravo').textContent = att.bravo || 0;
         renderPips('alpha', (win.alpha && win.alpha.verdicts) || [], lim);
         renderPips('bravo', (win.bravo && win.bravo.verdicts) || [], lim);
+        const prog = s.progress || {};
+        for (const side of ['alpha', 'bravo']) {
+          const p = prog[side];
+          if (p) $('st-' + side).textContent = (p.stolen || 0) + '/' + (p.total || 0);
+        }
         if (s.match_status === 'finished') {
           matchLive = false;
           const b = $('banner');
@@ -486,8 +515,11 @@ def create_app(controller: MatchController) -> FastAPI:
     app.state.feed = store
 
     @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        return _CONTROL_HTML
+    def index(request: Request) -> str:
+        ctrl: MatchController = request.app.state.controller
+        return _CONTROL_HTML.replace(
+            "__TREASURES_DEFAULT__", str(ctrl.treasures_per_side)
+        )
 
     @app.get("/api/state")
     def state(request: Request) -> dict:

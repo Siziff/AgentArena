@@ -29,6 +29,8 @@ class MatchSettings:
     treasure_length: int = DEFAULT_LENGTH
     alphabet: str = DEFAULT_ALPHABET
     max_agent_iterations: int = 50
+    # how many treasures each side hides; the winner steals ALL of the opponent's
+    treasures_per_side: int = 1
 
 
 @dataclass
@@ -110,6 +112,7 @@ def load_config(path: str | Path) -> AppConfig:
             treasure_length=int(m.get("treasure_length", DEFAULT_LENGTH)),
             alphabet=str(m.get("alphabet", DEFAULT_ALPHABET)),
             max_agent_iterations=int(m.get("max_agent_iterations", 50)),
+            treasures_per_side=int(m.get("treasures_per_side", 1)),
         ),
         llm=shared,
         llm_alpha=llm_alpha,

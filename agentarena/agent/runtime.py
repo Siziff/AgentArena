@@ -49,7 +49,8 @@ class AgentConfig:
     opponent_exposed: Path | None = None
     opponent_hint: str = "the opponent's exposed network services and files"
     rate_limit_per_minute: int = 10
-    treasure_name: str = "treasure.txt"
+    treasure_names: list[str] = field(default_factory=lambda: ["treasure.txt"])
+    opponent_treasure_count: int = 1
     policy: DefensePolicy = field(default_factory=DefensePolicy)
     max_iterations: int = 50
 
@@ -78,13 +79,16 @@ class AgentRuntime:
 
     def run_fortify(self, stop: threading.Event | None = None) -> PhaseResult:
         prompt = fortify_prompt(
-            self.config.side, self.config.treasure_name, self.config.policy
+            self.config.side, self.config.treasure_names, self.config.policy
         )
         return self._run_phase("fortify", prompt, stop)
 
     def run_battle(self, stop: threading.Event | None = None) -> PhaseResult:
         prompt = battle_prompt(
-            self.config.side, self.config.opponent_hint, self.config.rate_limit_per_minute
+            self.config.side,
+            self.config.opponent_hint,
+            self.config.rate_limit_per_minute,
+            self.config.opponent_treasure_count,
         )
         return self._run_phase("battle", prompt, stop)
 
@@ -139,7 +143,13 @@ class AgentRuntime:
                     )
                     if call.name == "submit_code":
                         result.submissions += 1
-                        if '"verdict": "correct"' in output or '"verdict":"correct"' in output:
+                        # A "correct" verdict steals ONE treasure; the match is
+                        # won only when the Judge reports it finished (all of
+                        # the opponent's treasures stolen).
+                        if (
+                            '"match_status": "finished"' in output
+                            or '"match_status":"finished"' in output
+                        ):
                             result.won = True
                 # Share the model's reasoning as a "thought". The emitter strips
                 # JSON/commands and skips empties and consecutive duplicates.
@@ -178,3 +188,8 @@ class AgentRuntime:
         system = messages[0]
         del messages[1 : len(messages) - (MAX_HISTORY - 1)]
         messages[0] = system
+        # Never start the kept window with a dangling "tool" message: tool
+        # messages must follow the assistant message that requested them,
+        # otherwise OpenAI-compatible APIs reject the request (HTTP 400).
+        while len(messages) > 1 and messages[1].role == "tool":
+            del messages[1]

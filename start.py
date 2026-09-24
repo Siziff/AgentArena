@@ -148,6 +148,8 @@ fortify_seconds = {fortify}
 max_match_seconds = 1800
 rate_limit_per_minute = 10
 max_agent_iterations = 40
+# treasures hidden by EACH side; the winner is the first to steal ALL of them
+treasures_per_side = 1
 
 [llm]
 provider = "{provider}"

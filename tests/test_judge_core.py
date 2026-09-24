@@ -80,6 +80,70 @@ class TestRateLimit(unittest.TestCase):
         self.assertEqual(out.status, OutcomeStatus.EVALUATED)
 
 
+class TestMultiTreasure(unittest.TestCase):
+    """With several treasures per side, ALL must be stolen to win."""
+
+    def make_multi(self, rate=10) -> JudgeCore:
+        core = JudgeCore(rate_limit_per_minute=rate, window_seconds=60)
+        core.register_secret(Side.ALPHA, "a" * 128)
+        core.register_secret(Side.ALPHA, "1" * 128)
+        core.register_secret(Side.BRAVO, "b" * 128)
+        core.register_secret(Side.BRAVO, "2" * 128)
+        return core
+
+    def test_first_treasure_stolen_but_match_ongoing(self):
+        core = self.make_multi()
+        out = core.submit("alpha", "b" * 128)
+        self.assertEqual(out.verdict, Verdict.CORRECT)
+        self.assertEqual(out.match_status, "ongoing")
+        self.assertFalse(core.is_finished)
+        self.assertIn("1/2", out.detail)
+
+    def test_stealing_all_treasures_wins(self):
+        core = self.make_multi()
+        core.submit("alpha", "b" * 128)
+        out = core.submit("alpha", "2" * 128)
+        self.assertEqual(out.verdict, Verdict.CORRECT)
+        self.assertEqual(out.match_status, "finished")
+        self.assertEqual(out.winner, Side.ALPHA)
+        self.assertIn("2/2", out.detail)
+        # later submissions are refused
+        out = core.submit("bravo", "a" * 128)
+        self.assertEqual(out.status, OutcomeStatus.MATCH_FINISHED)
+
+    def test_opponents_progress_is_independent(self):
+        core = self.make_multi()
+        core.submit("alpha", "b" * 128)   # alpha steals 1 of bravo's
+        core.submit("bravo", "a" * 128)   # bravo steals 1 of alpha's
+        core.submit("bravo", "1" * 128)   # bravo steals the last one -> wins
+        self.assertTrue(core.is_finished)
+        self.assertEqual(core.winner, Side.BRAVO)
+
+    def test_resubmitting_stolen_treasure_is_incorrect(self):
+        core = self.make_multi()
+        core.submit("alpha", "b" * 128)
+        out = core.submit("alpha", "b" * 128)  # already stolen
+        self.assertEqual(out.verdict, Verdict.INCORRECT)
+        self.assertEqual(out.detail, "treasure already stolen")
+        self.assertFalse(core.is_finished)
+
+    def test_status_reports_progress(self):
+        core = self.make_multi()
+        core.submit("alpha", "b" * 128)
+        status = core.status()
+        self.assertEqual(status["progress"]["alpha"], {"stolen": 1, "total": 2})
+        self.assertEqual(status["progress"]["bravo"], {"stolen": 0, "total": 2})
+
+    def test_duplicate_registration_counts_once(self):
+        core = JudgeCore(rate_limit_per_minute=10, window_seconds=60)
+        core.register_secret(Side.ALPHA, "a" * 128)
+        core.register_secret(Side.ALPHA, "a" * 128)  # same treasure twice
+        core.register_secret(Side.BRAVO, "b" * 128)
+        self.assertEqual(core.status()["progress"]["alpha"]["total"], 1)
+        out = core.submit("alpha", "b" * 128)
+        self.assertEqual(out.match_status, "finished")  # single treasure -> instant win
+
+
 class TestStatus(unittest.TestCase):
     def test_status_shape(self):
         core = make_core()

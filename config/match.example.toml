@@ -10,6 +10,9 @@ rate_limit_per_minute = 10
 # Treasure format.
 treasure_length = 128
 alphabet = "0123456789abcdef"
+# How many treasures EACH side hides (1-10). The winner is the first side
+# to steal ALL of the opponent's treasures (one correct submission each).
+treasures_per_side = 1
 # Safety cap on agent loop iterations per phase.
 max_agent_iterations = 50
 

@@ -18,26 +18,26 @@ A string identifier: `"alpha"` or `"bravo"`.
 ```json
 { "side": "alpha", "guess": "<128-char string>" }
 ```
-- `side` (string, required): which agent is submitting. The guess is checked against the **opponent's** treasure.
+- `side` (string, required): which agent is submitting. The guess is checked against the **opponent's** remaining (not yet stolen) treasures.
 - `guess` (string, required): the candidate code. Should be exactly 128 characters, but the Judge validates rather than assumes.
 
 ### SubmitResponse
 ```json
 {
   "verdict": "correct",
-  "match_status": "finished",
-  "winner": "alpha",
+  "match_status": "ongoing",
+  "winner": null,
   "remaining_in_window": 9,
   "attempts_total": 1,
-  "detail": "side alpha submitted the correct code for bravo"
+  "detail": "side alpha stole a treasure of bravo (1/2)"
 }
 ```
-- `verdict`: `"correct"` | `"incorrect"`.
-- `match_status`: `"ongoing"` | `"finished"`.
+- `verdict`: `"correct"` | `"incorrect"`. A `correct` verdict steals exactly one of the opponent's treasures; re-submitting an already-stolen code yields `incorrect` with detail `"treasure already stolen"`.
+- `match_status`: `"ongoing"` | `"finished"`. Becomes `"finished"` when a side has stolen **all** of the opponent's treasures.
 - `winner`: `"alpha"` | `"bravo"` | `null`.
 - `remaining_in_window`: how many submissions this side may still make in the current rate-limit window **after** this request.
 - `attempts_total`: total accepted submissions by this side this match.
-- `detail`: short human-readable note.
+- `detail`: short human-readable note (includes steal progress, e.g. `(1/2)`).
 
 ### StatusResponse
 ```json
@@ -47,9 +47,14 @@ A string identifier: `"alpha"` or `"bravo"`.
   "result": "ongoing",
   "winner": null,
   "attempts": { "alpha": 3, "bravo": 5 },
-  "limits": { "per_window": 10, "window_seconds": 60 }
+  "limits": { "per_window": 10, "window_seconds": 60 },
+  "progress": {
+    "alpha": { "stolen": 1, "total": 2 },
+    "bravo": { "stolen": 0, "total": 2 }
+  }
 }
 ```
+- `progress`: per side, how many of the **opponent's** treasures that side has stolen (`stolen`) out of how many (`total`).
 
 ### HealthResponse
 ```json
@@ -87,8 +92,8 @@ Liveness probe → `{"status":"ok"}`.
 
 ## Semantics & guarantees
 
-- **First correct wins.** The first `correct` verdict latches `winner` and `match_status=finished`. All later submissions return `409` and are not evaluated.
-- **Constant-time comparison.** Guesses are hashed with SHA-256 and compared to the stored digest with `hmac.compare_digest` to avoid leaking information via timing.
+- **Steal all to win.** Each `correct` verdict steals one of the opponent's treasures. The first side whose opponent has no treasures left latches `winner` and `match_status=finished`. All later submissions return `409` and are not evaluated.
+- **Digest-only verification.** Guesses are hashed with SHA-256 and matched against the stored digests; plaintext treasures are never stored.
 - **Per-side independence.** Each side has its own rate-limit window; one side's activity never throttles the other.
 - **Idempotent finish.** Once finished, the result is immutable.
 

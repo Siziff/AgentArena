@@ -78,8 +78,58 @@ class TestControl(unittest.TestCase):
                 _, html = _get(base, "/")
                 self.assertIn('id="fortify"', html)
                 self.assertIn('value="60"', html)          # default 1-minute fortify
+                self.assertIn('id="treasures"', html)      # treasures-per-side input
+                self.assertIn("Treasures per side", html)
                 self.assertIn("Start battle", html)
                 self.assertIn("Quick test battle", html)   # one-click system check
+
+    def test_setup_screen_shows_configured_treasure_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = MatchController(
+                provider_factory=_demo_provider_factory,
+                run_root=tmp,
+                treasures_per_side=3,
+                max_agent_iterations=10,
+            )
+            with serve(create_app(controller)) as base:
+                _, html = _get(base, "/")
+                self.assertIn('id="treasures"', html)
+                self.assertIn('value="3"', html)
+
+    def test_treasures_per_side_provisions_multiple_treasures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            controller = MatchController(
+                provider_factory=_demo_provider_factory,
+                run_root=tmp,
+                max_agent_iterations=10,  # no pre-seeded treasures -> generated
+            )
+            res = controller.start(StartRequest(fortify_seconds=0, treasures_per_side=2))
+            self.assertTrue(res["ok"])
+            try:
+                deadline = time.time() + 10
+                while time.time() < deadline:
+                    handles = controller.runner.handles
+                    if len(handles) == 2 and all(
+                        len(h.treasure_paths) == 2 for h in handles.values()
+                    ):
+                        break
+                    time.sleep(0.05)
+                handles = controller.runner.handles
+                self.assertEqual(len(handles), 2)
+                for handle in handles.values():
+                    self.assertEqual(len(handle.treasure_paths), 2)
+                    for p in handle.treasure_paths:
+                        self.assertTrue(p.is_file())
+                # the judge knows about all four treasures (2 per side)
+                status = controller.runner.judge.status()
+                self.assertEqual(status["progress"]["alpha"]["total"], 2)
+                self.assertEqual(status["progress"]["bravo"]["total"], 2)
+            finally:
+                controller.stop()
+                deadline = time.time() + 15
+                while controller.state == "running" and time.time() < deadline:
+                    time.sleep(0.1)
+            self.assertEqual(controller.state, "finished")
 
     def test_quick_test_battle_forces_60s_and_completes(self):
         with tempfile.TemporaryDirectory() as tmp:

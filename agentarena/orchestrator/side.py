@@ -23,6 +23,19 @@ from pathlib import Path
 from ..core.types import Side
 
 
+def treasure_file_names(count: int, base: str = "treasure.txt") -> list[str]:
+    """File names for `count` treasures: treasure.txt, treasure_2.txt, ...
+
+    The first treasure keeps the canonical base name so single-treasure
+    matches behave exactly as before.
+    """
+    names = [base]
+    stem, dot, suffix = base.partition(".")
+    for i in range(2, max(1, count) + 1):
+        names.append(f"{stem}_{i}{dot}{suffix}" if dot else f"{base}_{i}")
+    return names
+
+
 @dataclass
 class SideHandle:
     """A provisioned side."""
@@ -35,6 +48,8 @@ class SideHandle:
     reference: str | None = None
     # Where the opponent can reach this side (human-readable hint for prompts).
     exposure_hint: str = ""
+    # All treasure files (treasure_path is always the first one).
+    treasure_paths: list[Path] = field(default_factory=list)
 
 
 class LocalSideProvisioner:
@@ -45,23 +60,36 @@ class LocalSideProvisioner:
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
 
-    def provision(self, side: Side, treasure: str, treasure_name: str = "treasure.txt") -> SideHandle:
+    def provision(
+        self,
+        side: Side,
+        treasures: str | list[str],
+        treasure_name: str = "treasure.txt",
+    ) -> SideHandle:
+        if isinstance(treasures, str):
+            treasures = [treasures]
         workspace = (self.root / side.value / "workspace").resolve()
         workspace.mkdir(parents=True, exist_ok=True)
-        treasure_path = workspace / treasure_name
-        treasure_path.write_text(treasure, encoding="utf-8")
+        names = treasure_file_names(len(treasures), treasure_name)
+        treasure_paths = []
+        for name, treasure in zip(names, treasures):
+            path = workspace / name
+            path.write_text(treasure, encoding="utf-8")
+            treasure_paths.append(path)
         try:
             # Best-effort privacy on POSIX systems.
             workspace.chmod(0o700)
-            treasure_path.chmod(0o600)
+            for path in treasure_paths:
+                path.chmod(0o600)
         except OSError:
             pass
         return SideHandle(
             side=side,
             workspace=workspace,
-            treasure_path=treasure_path,
+            treasure_path=treasure_paths[0],
             backend=self.backend,
             exposure_hint=f"exposed directory at {workspace}",
+            treasure_paths=treasure_paths,
         )
 
     def teardown(self, handle: SideHandle) -> None:
@@ -104,7 +132,14 @@ class DockerSideProvisioner:
         )
         return proc.stdout.strip()
 
-    def provision(self, side: Side, treasure: str, treasure_name: str = "treasure.txt") -> SideHandle:
+    def provision(
+        self,
+        side: Side,
+        treasures: str | list[str],
+        treasure_name: str = "treasure.txt",
+    ) -> SideHandle:
+        if isinstance(treasures, str):
+            treasures = [treasures]
         name = f"agentarena-{side.value}"
         container_id = self._run(
             "run", "-d", "--name", name,
@@ -112,20 +147,25 @@ class DockerSideProvisioner:
             "--cpus", self.cpu, "--memory", self.memory,
             self.image, "sleep", "infinity",
         )
-        # Write the treasure inside the container's workspace (via stdin, not argv).
+        # Write the treasures inside the container's workspace (via stdin, not argv).
         workspace = Path("/side/workspace")
         self._run("exec", name, "mkdir", "-p", str(workspace))
-        self._run(
-            "exec", "-i", name, "sh", "-c", f"cat > {workspace / treasure_name}",
-            input_text=treasure,
-        )
+        names = treasure_file_names(len(treasures), treasure_name)
+        treasure_paths = []
+        for file_name, treasure in zip(names, treasures):
+            self._run(
+                "exec", "-i", name, "sh", "-c", f"cat > {workspace / file_name}",
+                input_text=treasure,
+            )
+            treasure_paths.append(workspace / file_name)
         return SideHandle(
             side=side,
             workspace=workspace,
-            treasure_path=workspace / treasure_name,
+            treasure_path=treasure_paths[0],
             backend=self.backend,
             reference=container_id,
             exposure_hint=f"container {name} on docker network {self.network}",
+            treasure_paths=treasure_paths,
         )
 
     def teardown(self, handle: SideHandle) -> None:

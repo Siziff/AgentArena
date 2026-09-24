@@ -49,7 +49,11 @@ class RunnerConfig:
     alphabet: str = DEFAULT_ALPHABET
     policy: DefensePolicy = field(default_factory=DefensePolicy)
     judge_client_factory: JudgeClientFactory = lambda side, core: InProcessJudgeClient(core, side)
-    treasures: dict[Side, str] | None = None  # pre-seeded, else generated
+    # Pre-seeded treasures (a single string or a list per side), else generated.
+    treasures: dict[Side, str | list[str]] | None = None
+    # How many treasures each side hides when `treasures` is not given.
+    # The winner is the first side to steal ALL of the opponent's treasures.
+    treasures_per_side: int = 1
     max_agent_iterations: int = 50
     poll_interval: float = 0.1
     # When set (e.g. by the Stop button), both agents stop and the match aborts.
@@ -121,17 +125,34 @@ class MatchRunner:
 
     # ---- setup --------------------------------------------------------------
 
-    def _provision_and_register(self) -> None:
+    def _treasure_lists(self) -> dict[Side, list[str]]:
+        """Resolve the list of treasures for each side.
+
+        Explicitly pre-seeded `treasures` win over `treasures_per_side`;
+        a side missing from the pre-seeded map gets generated treasures.
+        """
         cfg = self.config
+        lists: dict[Side, list[str]] = {}
         for side in (Side.ALPHA, Side.BRAVO):
-            treasure = (
-                cfg.treasures.get(side)
-                if cfg.treasures
-                else generate_treasure(cfg.treasure_length, cfg.alphabet)
-            )
-            handle = self.provisioner.provision(side, treasure)
+            seeded = cfg.treasures.get(side) if cfg.treasures else None
+            if seeded is not None:
+                lists[side] = [seeded] if isinstance(seeded, str) else list(seeded)
+            else:
+                lists[side] = [
+                    generate_treasure(cfg.treasure_length, cfg.alphabet)
+                    for _ in range(max(1, cfg.treasures_per_side))
+                ]
+            if not lists[side]:  # an explicitly empty list still needs a treasure
+                lists[side] = [generate_treasure(cfg.treasure_length, cfg.alphabet)]
+        return lists
+
+    def _provision_and_register(self) -> None:
+        treasures = self._treasure_lists()
+        for side in (Side.ALPHA, Side.BRAVO):
+            handle = self.provisioner.provision(side, treasures[side])
             self.handles[side] = handle
-            self.judge.register_secret(side, treasure)
+            for treasure in treasures[side]:
+                self.judge.register_secret(side, treasure)
 
     def _make_agent(self, side: Side, phase: str) -> AgentRuntime:
         cfg = self.config
@@ -143,7 +164,7 @@ class MatchRunner:
         commentary = CommentaryEmitter(
             side=side,
             path=Path(cfg.root) / "arena" / f"{side.value}.jsonl",
-            secret=handle.treasure_path.read_text(encoding="utf-8"),
+            secrets=[p.read_text(encoding="utf-8") for p in handle.treasure_paths],
             alphabet=cfg.alphabet,
             treasure_length=cfg.treasure_length,
         )
@@ -160,6 +181,8 @@ class MatchRunner:
                 else "none yet — access to the opponent opens when the battle begins"
             ),
             rate_limit_per_minute=cfg.rate_limit_per_minute,
+            treasure_names=[p.name for p in handle.treasure_paths],
+            opponent_treasure_count=len(opponent.treasure_paths),
             policy=cfg.policy,
             max_iterations=cfg.max_agent_iterations,
         )
@@ -222,6 +245,7 @@ class MatchRunner:
                 s.value: {
                     "workspace": str(h.workspace),
                     "treasure_path": str(h.treasure_path),
+                    "treasure_paths": [str(p) for p in h.treasure_paths],
                     "backend": h.backend,
                 }
                 for s, h in self.handles.items()

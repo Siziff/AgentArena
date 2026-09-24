@@ -111,10 +111,12 @@ _HTML = """<!doctype html>
         <div class="side alpha" style="margin-bottom:8px;">
           <span class="who">ALPHA</span><span class="counts">total <b id="att-alpha">0</b> &middot; this min</span>
           <span class="pips" id="pips-alpha"></span>
+          <span class="counts">&middot; treasures stolen <b id="st-alpha">0/1</b></span>
         </div>
         <div class="side bravo">
           <span class="who">BRAVO</span><span class="counts">total <b id="att-bravo">0</b> &middot; this min</span>
           <span class="pips" id="pips-bravo"></span>
+          <span class="counts">&middot; treasures stolen <b id="st-bravo">0/1</b></span>
         </div>
       </div>
       <div class="right">
@@ -177,6 +179,11 @@ _HTML = """<!doctype html>
           $('att-alpha').textContent = att.alpha || 0; $('att-bravo').textContent = att.bravo || 0;
           renderPips('alpha', (win.alpha && win.alpha.verdicts) || [], lim);
           renderPips('bravo', (win.bravo && win.bravo.verdicts) || [], lim);
+          const prog = s.progress || {};
+          for (const side of ['alpha', 'bravo']) {
+            const p = prog[side];
+            if (p) $('st-' + side).textContent = (p.stolen || 0) + '/' + (p.total || 0);
+          }
           if (s.match_status === 'finished') {
             const b = $('banner');
             b.innerHTML = s.winner ? ('&#127942; ' + esc(String(s.winner).toUpperCase()) + ' WINS') : 'DRAW';

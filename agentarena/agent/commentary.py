@@ -12,10 +12,9 @@ import json
 import re
 import threading
 import time
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-
-import re
 
 from ..core.treasure import DEFAULT_ALPHABET, DEFAULT_LENGTH
 from ..core.types import Side
@@ -65,14 +64,19 @@ class CommentaryEmitter:
         side: Side,
         path: Path | None = None,
         max_len: int = DEFAULT_MAX_LEN,
-        secret: str | None = None,
+        secrets: Iterable[str] | str | None = None,
         alphabet: str = DEFAULT_ALPHABET,
         treasure_length: int = DEFAULT_LENGTH,
     ) -> None:
         self.side = side
         self.path = Path(path) if path else None
         self.max_len = max_len
-        self._secret = secret
+        if secrets is None:
+            self._secrets: list[str] = []
+        elif isinstance(secrets, str):
+            self._secrets = [secrets]
+        else:
+            self._secrets = [s for s in secrets if s]
         self._pattern = _redaction_pattern(alphabet, treasure_length)
         self.entries: list[CommentaryEntry] = []
         self._last_text: str | None = None
@@ -98,8 +102,8 @@ class CommentaryEmitter:
             text = _PREFIX_RE.sub("", text)
         # collapse whitespace/newlines
         text = " ".join(text.split())
-        if self._secret:
-            text = text.replace(self._secret, "[redacted-secret]")
+        for secret in self._secrets:
+            text = text.replace(secret, "[redacted-secret]")
         text = self._pattern.sub("[redacted]", text)
         if len(text) > self.max_len:
             text = text[: self.max_len - 1].rstrip() + "…"
